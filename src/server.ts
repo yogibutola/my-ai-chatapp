@@ -12,17 +12,21 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 const app = express();
 const angularApp = new AngularNodeAppEngine();
 
+import { createProxyMiddleware } from 'http-proxy-middleware';
+
 /**
- * Example Express Rest API endpoints can be defined here.
- * Uncomment and define endpoints as necessary.
- *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
+ * Proxy API requests to backend
  */
+app.use(
+  '/api',
+  createProxyMiddleware({
+    target: 'https://capitalreport-209368501132.europe-west1.run.app',
+    changeOrigin: true,
+    secure: true,
+    logger: console,
+  })
+);
+
 
 /**
  * Serve static files from /browser
@@ -53,7 +57,7 @@ app.use((req, res, next) => {
  */
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
   const port = process.env['PORT'] || 4000;
-  app.listen(port, (error) => {
+  app.listen(Number(port), '0.0.0.0', (error) => {
     if (error) {
       throw error;
     }
