@@ -1,1 +1,16 @@
 /* You can add global styles to this file, and also import other style files */
+/* src/styles.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* * You can now add any global custom CSS below these imports.
+ * Tailwind will process and include all the necessary utility classes
+ * based on your component usage during the build process.
+ */
+
+/* Example: setting a global font */
+body {
+  font-family: 'Inter', sans-serif;
+}
