@@ -24,6 +24,9 @@ app.use(
     changeOrigin: true,
     secure: true,
     logger: console,
+    pathRewrite: {
+      '^/': '/api/',
+    },
   })
 );
 
