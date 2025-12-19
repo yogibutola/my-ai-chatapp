@@ -1,5 +1,5 @@
-import { Component, ChangeDetectionStrategy, signal, effect, ElementRef, viewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, ChangeDetectionStrategy, signal, effect, ElementRef, viewChild, inject, ChangeDetectorRef } from '@angular/core';
+import { CommonModule } from '@angular/common'; // Re-adding imports
 
 @Component({
   selector: 'app-root',
@@ -10,8 +10,12 @@ import { CommonModule } from '@angular/common';
   templateUrl: './app.html'
 })
 export class App {
+  private cdr = inject(ChangeDetectorRef);
+
   // --- STATE MANAGEMENT ---
   uploadedFiles = signal<File[]>([]);
+  errorMessage = signal<string | null>(null);
+  isUploading = signal<boolean>(false);
   uploadedFile = signal<File | null>(null);
   selectedFiles = signal<File[]>([]);
   messages = signal<{ sender: 'user' | 'ai'; text: string }[]>([]);
@@ -86,6 +90,13 @@ export class App {
     const files = input.files;
 
     if (!files || files.length === 0) return;
+    if (this.isUploading()) return;
+
+    this.isUploading.set(true);
+    this.errorMessage.set(null);
+    this.cdr.detectChanges();
+    console.log('Upload started...');
+
     const UPLOAD_ENDPOINT = "/api/v1/upload-files/";
     const filesArray = Array.from(files);
 
@@ -102,17 +113,22 @@ export class App {
     }
 
     if (newFiles.length === 0) {
-      console.warn('All selected files are already uploaded.');
+      this.showError('All selected files are already uploaded.');
+      this.isUploading.set(false);
       return;
     }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 1 minute timeout
 
     try {
       const response = await fetch(UPLOAD_ENDPOINT, {
         method: 'POST',
-        // Note: When using FormData, you typically do NOT set the 'Content-Type': 'multipart/form-data' header.
-        // The browser handles setting the correct boundary automatically.
         body: formData,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const result = await response.json();
@@ -122,22 +138,25 @@ export class App {
         let errorText = `Upload failed with status code ${response.status}.`;
         try {
           const errorBody = await response.json();
-          errorText += ` Server error: ${errorBody.error || errorBody.message || 'Unknown server error'}`;
+          errorText += ` ${errorBody.error || errorBody.message || ''}`;
         } catch (e) {
           // The server might not return JSON on error
-          errorText += ' Could not parse error response.';
         }
         console.error(errorText);
+        this.showError(errorText);
       }
-    } catch (error) {
-      console.error("Network or Fetch Error:", error);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        this.showError('Upload timed out (1 minute limit). Please try again.');
+      } else {
+        console.error("Network or Fetch Error:", error);
+        this.showError('Upload failed due to network error.');
+      }
     } finally {
-      // Re-enable the button but only if a file is still selected
-      //           if (fileInput.files.length > 0) {
-      //              // uploadButton.disabled = false;
-      //           }
+      this.isUploading.set(false);
+      this.cdr.detectChanges();
+      input.value = '';
     }
-    // console.log(`File "${file.name}" uploaded.`);
   }
 
   askSuggestedQuestion(question: string): void {
@@ -179,6 +198,7 @@ export class App {
         console.error("Fetch error:", error);
       }
       console.log("AI API Error:", error);
+      this.showError('Sorry, I encountered an error. Please try again.');
       this.messages.update(msgs => [...msgs, {
         sender: 'ai',
         text: "Sorry, I encountered an error. Please try again."
@@ -245,6 +265,19 @@ export class App {
     this.isLoading.set(false);
     this.suggestedQuestions.set([]);
     this.isLoadingSuggestions.set(false);
+    this.isLoadingSuggestions.set(false);
+    this.errorMessage.set(null);
+  }
+
+  showError(message: string): void {
+    this.errorMessage.set(message);
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      if (this.errorMessage() === message) {
+        this.errorMessage.set(null);
+        this.cdr.detectChanges();
+      }
+    }, 60000);
   }
 
   // --- UTILITY METHODS ---
