@@ -88,6 +88,7 @@ export class App {
       text: `File "<b>${this.escapeHtml(file.name)}</b>" is ready. What would you like to know?`
     }]);
     this.suggestedQuestions.set([]); // Clear previous suggestions
+    this.generateSuggestedQuestions(); // <--- Auto-generate
   }
 
   /** ✅ Adds new file to uploaded list & sets it active */
@@ -193,6 +194,11 @@ export class App {
     try {
       const activeDocs = this.selectedFiles();
       const names = activeDocs.map(f => f.name).join(', ');
+
+      if (names === '') {
+        this.showError('Please select a file from Uploaded Documents.');
+        return;
+      }
       const URL = `/api/v1/ask_question/?documents=${encodeURIComponent(names)}&query=${encodeURIComponent(query)}`;
 
       const response = await fetch(URL, {
