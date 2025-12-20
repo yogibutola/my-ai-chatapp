@@ -1,6 +1,14 @@
 import { Component, ChangeDetectionStrategy, signal, effect, ElementRef, viewChild, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common'; // Re-adding imports
 
+
+interface ServerFile {
+  name: string;
+  size: string;
+  date: string;
+  selected?: boolean;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -24,6 +32,13 @@ export class App {
   isDragging = signal<boolean>(false);
   isLoadingSuggestions = signal<boolean>(false);
   suggestedQuestions = signal<string[]>([]);
+
+  // Browsing State
+  isBrowsing = signal<boolean>(false);
+  serverFiles = signal<ServerFile[]>([]);
+  searchQuery = signal<string>('');
+  selectedServerFiles = signal<Set<string>>(new Set());
+
   // Access to the chat container element for scrolling
   chatContainer = viewChild<ElementRef<HTMLDivElement>>('chatContainer');
 
@@ -278,6 +293,109 @@ export class App {
         this.cdr.detectChanges();
       }
     }, 60000);
+  }
+
+  // --- BROWSING METHODS ---
+
+  openBrowseModal(): void {
+    this.isBrowsing.set(true);
+    this.selectedServerFiles.set(new Set()); // Reset selection
+    this.searchQuery.set('');
+    this.fetchServerFiles();
+  }
+
+  closeBrowseModal(): void {
+    this.isBrowsing.set(false);
+  }
+
+  /** Fetch files from server */
+  async fetchServerFiles(query: string = ''): Promise<void> {
+    try {
+      // Use query param for server-side filtering if supported, otherwise we filter client-side
+      const URL = `/api/v1/list_files/`;
+      const response = await fetch(URL);
+
+      if (!response.ok) {
+        throw new Error(`Failed to list files: ${response.statusText}`);
+      }
+
+      const data = await response.json(); // Expecting array of objects or strings
+
+      if (Array.isArray(data)) {
+        // Map response to ServerFile interface
+        const mappedFiles: ServerFile[] = data.map((item: any) => {
+          // Handle if item is just a string (filename) or object
+          const name = typeof item === 'string' ? item : (item.name || item.filename || 'Unknown');
+          return {
+            name: name,
+            size: item.size || 'Unknown',
+            date: item.date || item.created_at || new Date().toISOString().split('T')[0]
+          };
+        });
+
+        // Client-side filter for search query (since we are fetching all)
+        if (query.trim()) {
+          const lowerQuery = query.toLowerCase();
+          const filtered = mappedFiles.filter(f => f.name.toLowerCase().includes(lowerQuery));
+          this.serverFiles.set(filtered);
+        } else {
+          this.serverFiles.set(mappedFiles);
+        }
+      } else {
+        console.warn('Unexpected API response format', data);
+        this.serverFiles.set([]);
+      }
+
+    } catch (error) {
+      console.error('Error fetching server files:', error);
+      this.showError('Could not retrieve server files.');
+      this.serverFiles.set([]);
+    }
+  }
+
+  onSearchQueryChange(event: Event): void {
+    const query = (event.target as HTMLInputElement).value;
+    this.searchQuery.set(query);
+    this.fetchServerFiles(query);
+  }
+
+  toggleServerFileSelection(fileName: string): void {
+    this.selectedServerFiles.update(set => {
+      const newSet = new Set(set);
+      if (newSet.has(fileName)) {
+        newSet.delete(fileName);
+      } else {
+        newSet.add(fileName);
+      }
+      return newSet;
+    });
+  }
+
+  isServerFileSelected(fileName: string): boolean {
+    return this.selectedServerFiles().has(fileName);
+  }
+
+  importSelectedFiles(): void {
+    const selectedNames = this.selectedServerFiles();
+    const filesToImport = this.serverFiles().filter(f => selectedNames.has(f.name));
+
+    // Mock converting ServerFile to File object (this is a simulation)
+    const importedFiles = filesToImport.map(sf => {
+      // We create a dummy File object appropriately
+      // Using a trick to creating a File from nothing (blob)
+      const blob = new Blob(["(Mock Content)"], { type: 'text/plain' });
+      return new File([blob], sf.name, { type: 'application/octet-stream' });
+    });
+
+    // Filter out duplicates that are already uploaded
+    const newFiles = importedFiles.filter(f => !this.uploadedFiles().some(existing => existing.name === f.name));
+
+    if (newFiles.length > 0) {
+      this.uploadedFiles.update(list => [...list, ...newFiles]);
+      this.selectFile(newFiles[0]); // Select the first new file
+    }
+
+    this.closeBrowseModal();
   }
 
   // --- UTILITY METHODS ---
