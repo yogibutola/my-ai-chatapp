@@ -95,6 +95,14 @@
           <!-- Modal Footer -->
           <div
             class="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-3 bg-slate-50 dark:bg-slate-900">
+            <div class="flex-grow">
+              @if (selectedServerFiles().size > 0) {
+              <button (click)="deleteSelectedFiles()"
+                class="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200">
+                Delete Selected
+              </button>
+              }
+            </div>
             <button (click)="closeBrowseModal()"
               class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white transition-colors">
               Cancel

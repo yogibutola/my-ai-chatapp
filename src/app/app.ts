@@ -398,6 +398,56 @@ export class App {
     this.closeBrowseModal();
   }
 
+  /** Delete a single file from the server */
+  async deleteServerFile(fileName: string): Promise<boolean> {
+    try {
+      const URL = `/api/v1/delete_file/?filename=${fileName}`;
+      const response = await fetch(URL, { method: 'DELETE' });
+      if (!response.ok) {
+        console.error(`Failed to delete ${fileName}: ${response.statusText}`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error(`Error deleting ${fileName}:`, error);
+      return false;
+    }
+  }
+
+  /** Delete all selected files */
+  async deleteSelectedFiles(): Promise<void> {
+    const selectedNames = Array.from(this.selectedServerFiles());
+    if (selectedNames.length === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ${selectedNames.length} file(s)? This cannot be undone.`)) {
+      return;
+    }
+
+    this.isBrowsing.set(false); // Temporarily close or show loading state? keeping it simple.
+    // Better to show loading.
+
+    let deletedCount = 0;
+
+    // Execute deletions
+    // We run them sequentially or parallel. Parallel is faster.
+    const deletionPromises = selectedNames.map(name => this.deleteServerFile(name));
+    const results = await Promise.all(deletionPromises);
+
+    deletedCount = results.filter(success => success).length;
+
+    if (deletedCount > 0) {
+      this.showError(`Successfully deleted ${deletedCount} file(s).`);
+      // Refresh list
+      // Reset selection
+      this.selectedServerFiles.set(new Set());
+      this.isBrowsing.set(true); // Re-open if we closed it, or just refresh
+      await this.fetchServerFiles(this.searchQuery());
+    } else {
+      this.showError('Failed to delete files.');
+      this.isBrowsing.set(true);
+    }
+  }
+
   // --- UTILITY METHODS ---
   private scrollToBottom(): void {
     setTimeout(() => {
